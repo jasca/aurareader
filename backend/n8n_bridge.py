@@ -1,10 +1,22 @@
+import sys
+import os
 import logging
 import math
 import random
 from datetime import datetime
-from backend.templates import get_aura_template, get_biorhythm_template
-from backend.pdf_generator import create_aura_pdf, create_biorhythm_pdf
-from backend.excel_logger import log_scan_to_excel
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+try:
+    from backend.templates import get_aura_template, get_biorhythm_template
+    from backend.pdf_generator import create_aura_pdf, create_biorhythm_pdf
+    from backend.excel_logger import log_scan_to_excel
+except ModuleNotFoundError:
+    from templates import get_aura_template, get_biorhythm_template
+    from pdf_generator import create_aura_pdf, create_biorhythm_pdf
+    from excel_logger import log_scan_to_excel
 
 # Map to color names
 color_names = {

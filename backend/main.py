@@ -1,9 +1,20 @@
+import sys
+import os
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 import asyncio
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from backend.n8n_bridge import get_aura_recommendations, get_biorhythm_analysis
+
+try:
+    from backend.n8n_bridge import get_aura_recommendations, get_biorhythm_analysis
+except ModuleNotFoundError:
+    from n8n_bridge import get_aura_recommendations, get_biorhythm_analysis
 
 app = FastAPI()
 
@@ -15,8 +26,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 # Serve the frontend statically
-app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
 class AnalyzeRequest(BaseModel):
     name: str = ""
