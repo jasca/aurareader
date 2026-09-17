@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             let devices = await navigator.mediaDevices.enumerateDevices();
             let videoDevices = devices.filter(d => d.kind === 'videoinput');
             
-            // Si las etiquetas están vacías, solicitar permiso preliminar para leer los nombres
+            // Si las etiquetas están vacías, solicitar permiso preliminar para leer los nombres de las cámaras
             if (videoDevices.length > 0 && !videoDevices[0].label) {
                 try {
                     const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -67,15 +67,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             cameraSelect.innerHTML = '';
-            if (videoDevices.length === 0) {
-                const opt = document.createElement('option');
-                opt.value = '';
-                opt.text = 'No se encontraron cámaras';
-                cameraSelect.appendChild(opt);
-                return;
-            }
+            
+            // Opción por defecto (Universal)
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.text = '📷 Cámara Predeterminada / DroidCam';
+            cameraSelect.appendChild(defaultOpt);
 
-            let selectedIndex = 0;
+            let selectedIndex = 0; // Por defecto la opción universal
             videoDevices.forEach((device, index) => {
                 const opt = document.createElement('option');
                 opt.value = device.deviceId;
@@ -85,7 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const lower = label.toLowerCase();
                 if (lower.includes('droidcam') || lower.includes('loopback') || lower.includes('dummy') || lower.includes('v4l2')) {
-                    selectedIndex = index;
+                    selectedIndex = index + 1; // +1 por la opción default
                 }
             });
             cameraSelect.selectedIndex = selectedIndex;
@@ -157,15 +156,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         const selectedDeviceId = cameraSelect ? cameraSelect.value : '';
 
         const tryGetUserMedia = async (deviceId) => {
-            let vConstraint = { width: { ideal: 1280 }, height: { ideal: 720 } };
-            if (deviceId) vConstraint.deviceId = { exact: deviceId };
+            // 1. Intentar con deviceId preferido e ideal resolución
             try {
-                return await navigator.mediaDevices.getUserMedia({ video: vConstraint });
+                const constraints = deviceId
+                    ? { video: { deviceId: { ideal: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } }
+                    : { video: { width: { ideal: 1280 }, height: { ideal: 720 } } };
+                return await navigator.mediaDevices.getUserMedia(constraints);
             } catch (e1) {
-                console.warn("Reintentando captura con restricciones holgadas...", e1);
-                let fallbackConstraint = deviceId ? { deviceId: { exact: deviceId } } : true;
-                return await navigator.mediaDevices.getUserMedia({ video: fallbackConstraint });
+                console.warn("Intento 1 de cámara falló:", e1);
             }
+
+            // 2. Intentar solo con deviceId preferido sin restricciones de resolución
+            try {
+                const constraints = deviceId
+                    ? { video: { deviceId: { ideal: deviceId } } }
+                    : { video: true };
+                return await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (e2) {
+                console.warn("Intento 2 de cámara falló:", e2);
+            }
+
+            // 3. Fallback universal total (cualquier cámara disponible sin ID estricto)
+            console.warn("Usando fallback universal { video: true }");
+            return await navigator.mediaDevices.getUserMedia({ video: true });
         };
 
         try {
@@ -181,7 +194,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(callback) callback();
         } catch (err) {
             console.error("Error al iniciar cámara/DroidCam:", err);
-            alert("No se pudo iniciar la cámara seleccionada (DroidCam). Verifica que la app DroidCam esté abierta y activa en Linux.");
+            alert("No se pudo iniciar la cámara (DroidCam). Verifica que la app DroidCam esté abierta y activa en Linux.");
             breathingUI.classList.add('hidden');
             resetToMenu();
         }
