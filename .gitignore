@@ -1,0 +1,24 @@
+# Environment variables
+.env
+*.env
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated Reports & Logs
+backend/reports/*.pdf
+backend/reports/*.png
+backend/reports/temp_*.jpg
+backend/consultantes_aurareader.xlsx
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
