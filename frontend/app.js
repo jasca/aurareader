@@ -320,6 +320,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (emotionInterval) clearInterval(emotionInterval);
 
+        const auraPalette = ["#a855f7", "#34d399", "#fef08a", "#3b82f6", "#ec4899", "#ef4444", "#451a03"];
+        let colorIdx = 0;
+
         emotionInterval = setInterval(async () => {
             if (isFrozen || !isCameraRunning) { clearInterval(emotionInterval); return; }
             try {
@@ -327,16 +330,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (detections && detections.expressions) {
                     Object.keys(collectedEmotions).forEach(key => {
                         const val = detections.expressions[key];
-                        // Solo sumar si supera el umbral de ruido de cámara (0.25)
+                        // Solo sumar si supera el umbral de emoción (0.25)
                         if (val && val > 0.25) {
                             collectedEmotions[key] += val;
                         }
                     });
                     emotionFramesCount++;
                 }
-            } catch (e) {
-                // Ignore detector errors
-            }
+            } catch (e) {}
+
+            // Transmutar suavemente el aura en vivo durante la respiración
+            colorIdx = (colorIdx + 1) % auraPalette.length;
+            currentColorHex = auraPalette[colorIdx];
         }, 500);
 
         let cycleCount = 0;
@@ -344,14 +349,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         setTimeout(() => {
             function doBreathCycle() {
-                // REQUERIMIENTO 1: Exactamente 2 inhalaciones y 2 exhalaciones
+                // 2 inhalaciones y 2 exhalaciones ágiles de 2.5s cada una
                 if (cycleCount >= 2) {
                     if (emotionInterval) clearInterval(emotionInterval);
                     finishAuraScan();
                     return;
                 }
                 playAudio(tibetanBowl);
-                setTimeout(() => playAudio(ttsInhala), 300); 
+                setTimeout(() => playAudio(ttsInhala), 200); 
                 breathText.innerText = "Inhala...";
                 breathCircle.className = "breath-circle inhale";
                 
@@ -359,11 +364,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     playAudio(ttsExhala);
                     breathText.innerText = "Exhala...";
                     breathCircle.className = "breath-circle exhale";
-                    setTimeout(() => { cycleCount++; doBreathCycle(); }, 4000);
-                }, 4000);
+                    setTimeout(() => { cycleCount++; doBreathCycle(); }, 2500);
+                }, 2500);
             }
             doBreathCycle();
-        }, 3000);
+        }, 2000);
     }
 
     btnStartBiorhythm.addEventListener('click', async () => {
@@ -457,18 +462,60 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         
-        if (dominantEmotion === "happy" && maxVal > 0.5) currentColorHex = "#ec4899"; // Rosa
-        else if (dominantEmotion === "angry" && maxVal > 0.5) currentColorHex = "#ef4444"; // Rojo
-        else if (dominantEmotion === "sad" && maxVal > 0.5) currentColorHex = "#451a03"; // Marrón
-        else if (dominantEmotion === "surprised" && maxVal > 0.5) currentColorHex = "#fef08a"; // Amarillo
-        else if (dominantEmotion === "fearful" && maxVal > 0.5) currentColorHex = "#a855f7"; // Violeta
-        else if (dominantEmotion === "disgusted" && maxVal > 0.5) currentColorHex = "#34d399"; // Verde
+        if (dominantEmotion === "happy" && maxVal > 0.4) currentColorHex = "#ec4899";
+        else if (dominantEmotion === "angry" && maxVal > 0.4) currentColorHex = "#ef4444";
+        else if (dominantEmotion === "sad" && maxVal > 0.4) currentColorHex = "#451a03";
+        else if (dominantEmotion === "surprised" && maxVal > 0.4) currentColorHex = "#fef08a";
+        else if (dominantEmotion === "fearful" && maxVal > 0.4) currentColorHex = "#a855f7";
+        else if (dominantEmotion === "disgusted" && maxVal > 0.4) currentColorHex = "#34d399";
         else {
-            // Si la emoción es serena/neutral, seleccionar el color de aura basado en el hash del nombre y momento
-            const userName = document.getElementById('userName').value.trim() || "Consultante";
-            const seed = (userName + Date.now().toString()).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-            currentColorHex = auraColors[seed % auraColors.length];
+            // Rotación aleatoria / variada entre los 7 colores holísticos
+            const randomIndex = Math.floor(Math.random() * auraColors.length);
+            currentColorHex = auraColors[randomIndex];
         }
+
+        // Renderizado explícito en canvas con el nuevo color antes de tomar la captura
+        if (staticMask && staticPerson) {
+            const expandedAuraMask = createExpandedMask(staticMask, 28);
+            tempCtx.save();
+            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.drawImage(expandedAuraMask, 0, 0);
+            tempCtx.globalCompositeOperation = 'source-in';
+            tempCtx.fillStyle = currentColorHex;
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.restore();
+
+            canvasCtx.save();
+            canvasCtx.fillStyle = '#000000';
+            canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.globalCompositeOperation = 'screen';
+            canvasCtx.filter = 'blur(18px)';
+            canvasCtx.drawImage(tempCanvas, 0, 0);
+            canvasCtx.filter = 'blur(8px)';
+            canvasCtx.drawImage(tempCanvas, 0, 0);
+            canvasCtx.restore();
+
+            canvasCtx.save();
+            canvasCtx.globalCompositeOperation = 'source-over';
+            canvasCtx.drawImage(staticPerson, 0, 0);
+            canvasCtx.restore();
+        }
+
+        setTimeout(() => {
+            const userName = document.getElementById('userName').value.trim();
+            const userPhone = document.getElementById('userPhone').value.trim();
+            const userEmail = document.getElementById('userEmail').value.trim();
+            const sessionId = "A" + Date.now().toString(36).toUpperCase();
+
+            doFlashAndCapture('/api/analyze', { 
+                name: userName,
+                phone_number: userPhone,
+                email: userEmail,
+                aura_color_hex: currentColorHex,
+                session_id: sessionId
+            }, showAuraResults);
+        }, 150);
+    }
 
         setTimeout(() => {
             const userName = document.getElementById('userName').value.trim();
