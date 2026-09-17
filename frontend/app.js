@@ -311,19 +311,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         biorhythmForm.classList.remove('hidden');
     });
 
+    let emotionInterval = null;
+
     function beginAuraScan() {
         isScanning = true;
         collectedEmotions = { happy: 0, neutral: 0, angry: 0, sad: 0, fearful: 0, disgusted: 0, surprised: 0 };
         emotionFramesCount = 0;
 
-        const emotionInterval = setInterval(async () => {
+        if (emotionInterval) clearInterval(emotionInterval);
+
+        emotionInterval = setInterval(async () => {
             if (isFrozen || !isCameraRunning) { clearInterval(emotionInterval); return; }
-            const detections = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
-            if (detections && detections.expressions) {
-                Object.keys(collectedEmotions).forEach(key => {
-                    if(detections.expressions[key]) collectedEmotions[key] += detections.expressions[key];
-                });
-                emotionFramesCount++;
+            try {
+                const detections = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
+                if (detections && detections.expressions) {
+                    Object.keys(collectedEmotions).forEach(key => {
+                        const val = detections.expressions[key];
+                        // Solo sumar si supera el umbral de ruido de cámara (0.25)
+                        if (val && val > 0.25) {
+                            collectedEmotions[key] += val;
+                        }
+                    });
+                    emotionFramesCount++;
+                }
+            } catch (e) {
+                // Ignore detector errors
             }
         }, 500);
 
@@ -334,6 +346,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             function doBreathCycle() {
                 // REQUERIMIENTO 1: Exactamente 2 inhalaciones y 2 exhalaciones
                 if (cycleCount >= 2) {
+                    if (emotionInterval) clearInterval(emotionInterval);
                     finishAuraScan();
                     return;
                 }
@@ -419,17 +432,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     async function finishAuraScan() {
+        if (emotionInterval) clearInterval(emotionInterval);
         breathingUI.classList.add('hidden');
         isScanning = false;
         
         const auraColors = [
-            "#ec4899", // Rosa (Amor y Alegría)
-            "#ef4444", // Rojo (Pasión y Fuerza)
-            "#451a03", // Marrón (Enraizamiento)
-            "#fef08a", // Amarillo (Intelecto y Luz)
             "#a855f7", // Violeta (Espiritualidad)
+            "#ec4899", // Rosa (Amor y Alegría)
             "#34d399", // Verde (Sanación y Equilibrio)
-            "#3b82f6"  // Azul (Calma y Paz)
+            "#fef08a", // Amarillo (Intelecto y Luz)
+            "#3b82f6", // Azul (Calma y Paz)
+            "#ef4444", // Rojo (Pasión y Fuerza)
+            "#451a03"  // Marrón (Enraizamiento)
         ];
         
         let dominantEmotion = "neutral";
@@ -443,15 +457,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         
-        if (dominantEmotion === "happy") currentColorHex = "#ec4899"; // Rosa
-        else if (dominantEmotion === "angry") currentColorHex = "#ef4444"; // Rojo
-        else if (dominantEmotion === "sad") currentColorHex = "#451a03"; // Marrón
-        else if (dominantEmotion === "surprised") currentColorHex = "#fef08a"; // Amarillo
-        else if (dominantEmotion === "fearful") currentColorHex = "#a855f7"; // Violeta
-        else if (dominantEmotion === "disgusted") currentColorHex = "#34d399"; // Verde
+        if (dominantEmotion === "happy" && maxVal > 0.5) currentColorHex = "#ec4899"; // Rosa
+        else if (dominantEmotion === "angry" && maxVal > 0.5) currentColorHex = "#ef4444"; // Rojo
+        else if (dominantEmotion === "sad" && maxVal > 0.5) currentColorHex = "#451a03"; // Marrón
+        else if (dominantEmotion === "surprised" && maxVal > 0.5) currentColorHex = "#fef08a"; // Amarillo
+        else if (dominantEmotion === "fearful" && maxVal > 0.5) currentColorHex = "#a855f7"; // Violeta
+        else if (dominantEmotion === "disgusted" && maxVal > 0.5) currentColorHex = "#34d399"; // Verde
         else {
-            // Selección variada dinámica de color si la emoción es neutral o imperceptible
-            currentColorHex = auraColors[Math.floor(Math.random() * auraColors.length)];
+            // Si la emoción es serena/neutral, seleccionar el color de aura basado en el hash del nombre y momento
+            const userName = document.getElementById('userName').value.trim() || "Consultante";
+            const seed = (userName + Date.now().toString()).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+            currentColorHex = auraColors[seed % auraColors.length];
         }
 
         setTimeout(() => {
