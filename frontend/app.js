@@ -76,19 +76,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     selfieSegmentation.onResults(onResults);
 
     async function loadModels() {
-        try {
-            await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
-            await faceapi.nets.faceExpressionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
-            await selfieSegmentation.initialize();
-            
-            btnMenuAura.disabled = false; btnMenuBiorhythm.disabled = false;
-            btnMenuAura.innerText = "✨ Iniciar Escáner de Aura"; btnMenuBiorhythm.innerText = "🔋 Iniciar Análisis Biorritmo";
+        const enableButtons = () => {
+            btnMenuAura.disabled = false;
+            btnMenuBiorhythm.disabled = false;
+            btnMenuAura.innerText = "✨ Iniciar Escáner de Aura";
+            btnMenuBiorhythm.innerText = "🔋 Iniciar Análisis Biorritmo";
             statusText.innerText = "Sistema Listo. Esperando selección.";
             statusText.style.color = "#34d399";
+        };
+
+        // Forzar habilitación en máximo 1.2 segundos por si el CDN está lento o sin internet
+        const timeoutId = setTimeout(() => {
+            console.warn("Habilitando botones por timeout de red...");
+            enableButtons();
+        }, 1200);
+
+        try {
+            if (typeof faceapi !== 'undefined') {
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/'),
+                    faceapi.nets.faceExpressionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/')
+                ]).catch(e => console.warn("Modelos de rostro CDN no alcanzados (Modo Stand Activo)", e));
+            }
+            if (typeof selfieSegmentation !== 'undefined') {
+                await selfieSegmentation.initialize().catch(e => console.warn("SelfieSegmentation inicializado con fallback", e));
+            }
+            clearTimeout(timeoutId);
+            enableButtons();
         } catch (e) {
-            console.error("Error cargando modelos:", e);
-            statusText.innerText = "Error cargando IA.";
-            statusText.style.color = "#ef4444";
+            console.warn("Inicialización parcial de IA:", e);
+            clearTimeout(timeoutId);
+            enableButtons();
         }
     }
     loadModels();
