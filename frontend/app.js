@@ -422,6 +422,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         breathingUI.classList.add('hidden');
         isScanning = false;
         
+        const auraColors = [
+            "#ec4899", // Rosa (Amor y Alegría)
+            "#ef4444", // Rojo (Pasión y Fuerza)
+            "#451a03", // Marrón (Enraizamiento)
+            "#fef08a", // Amarillo (Intelecto y Luz)
+            "#a855f7", // Violeta (Espiritualidad)
+            "#34d399", // Verde (Sanación y Equilibrio)
+            "#3b82f6"  // Azul (Calma y Paz)
+        ];
+        
         let dominantEmotion = "neutral";
         let maxVal = 0;
         if (emotionFramesCount > 0) {
@@ -439,7 +449,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         else if (dominantEmotion === "surprised") currentColorHex = "#fef08a"; // Amarillo
         else if (dominantEmotion === "fearful") currentColorHex = "#a855f7"; // Violeta
         else if (dominantEmotion === "disgusted") currentColorHex = "#34d399"; // Verde
-        else currentColorHex = "#3b82f6"; // Azul
+        else {
+            // Selección variada dinámica de color si la emoción es neutral o imperceptible
+            currentColorHex = auraColors[Math.floor(Math.random() * auraColors.length)];
+        }
 
         setTimeout(() => {
             const userName = document.getElementById('userName').value.trim();
