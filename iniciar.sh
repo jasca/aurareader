@@ -40,20 +40,29 @@ for i in {1..10}; do
     sleep 0.5
 done
 
-# 3. Abrir el navegador en el kiosco
+# 3. Abrir el navegador en el kiosco (pantalla completa en ventana dedicada)
 echo "Abriendo interfaz en el navegador..."
+CHROME_FLAGS="--user-data-dir=/tmp/aurareader_chrome_profile --new-window --start-fullscreen --app=http://127.0.0.1:8000/frontend/index.html"
+
 if command -v google-chrome &> /dev/null; then
-    google-chrome --start-fullscreen --app="http://127.0.0.1:8000/frontend/index.html" &
+    google-chrome $CHROME_FLAGS &
 elif command -v chromium-browser &> /dev/null; then
-    chromium-browser --start-fullscreen --app="http://127.0.0.1:8000/frontend/index.html" &
+    chromium-browser $CHROME_FLAGS &
+elif command -v chromium &> /dev/null; then
+    chromium $CHROME_FLAGS &
 elif command -v firefox &> /dev/null; then
-    firefox --kiosk "http://127.0.0.1:8000/frontend/index.html" &
+    firefox --new-window --kiosk "http://127.0.0.1:8000/frontend/index.html" &
 elif command -v xdg-open &> /dev/null; then
     xdg-open "http://127.0.0.1:8000/frontend/index.html" &
 fi
 
 echo "=========================================="
 echo "✅ AuraReader listo para operar."
-echo "Accede manualmente en tu navegador: http://127.0.0.1:8000/frontend/index.html"
+echo "Acceso web: http://127.0.0.1:8000/frontend/index.html"
+echo "Presiona Ctrl+C en esta terminal para cerrar el sistema."
 echo "=========================================="
+
+# Mantener el proceso en primer plano para que el operador vea la ejecucion activa
+trap "kill $SERVER_PID 2>/dev/null; exit" INT TERM
+wait $SERVER_PID
 
