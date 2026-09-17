@@ -81,11 +81,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const label = device.label || `Cámara ${index + 1}`;
                 opt.text = label;
                 cameraSelect.appendChild(opt);
-
-                const lower = label.toLowerCase();
-                if (lower.includes('droidcam') || lower.includes('loopback') || lower.includes('dummy') || lower.includes('v4l2')) {
-                    selectedIndex = index + 1; // +1 por la opción default
-                }
             });
             cameraSelect.selectedIndex = selectedIndex;
         } catch (err) {
