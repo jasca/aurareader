@@ -17,6 +17,7 @@ backend/reports/*.pdf
 backend/reports/*.png
 backend/reports/temp_*.jpg
 backend/consultantes_aurareader.xlsx
+backend.log
 
 # OS / IDE
 .DS_Store
