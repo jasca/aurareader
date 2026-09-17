@@ -16,19 +16,29 @@ if [ ! -d "$DIR/venv" ]; then
     "$DIR/venv/bin/pip" install -r "$DIR/requirements.txt"
 fi
 
-# 1. Detener instancias anteriores en el puerto 8000 si las hubiera
+# 1. Liberar puerto 8000 de cualquier proceso anterior
+echo "Limpiando puerto 8000..."
+lsof -ti:8000 | xargs kill -9 > /dev/null 2>&1 || true
 fuser -k 8000/tcp > /dev/null 2>&1 || true
+pkill -f "backend.main" > /dev/null 2>&1 || true
+sleep 1
 
 # 2. Iniciar el servidor backend en segundo plano
 echo "Iniciando servidor local..."
-"$DIR/venv/bin/python3" -m backend.main > /dev/null 2>&1 &
+"$DIR/venv/bin/python3" -m backend.main > "$DIR/backend.log" 2>&1 &
 
-# Guardar el PID del proceso
 SERVER_PID=$!
 echo "Servidor iniciado en PID $SERVER_PID"
 
-# Esperar 2 segundos a que levante el servidor
-sleep 2
+# Esperar a que el servidor responda
+echo "Verificando disponibilidad del servidor..."
+for i in {1..10}; do
+    if curl -s http://127.0.0.1:8000/frontend/index.html > /dev/null; then
+        echo "✅ Servidor respondiendo en http://127.0.0.1:8000"
+        break
+    fi
+    sleep 0.5
+done
 
 # 3. Abrir el navegador en el kiosco
 echo "Abriendo interfaz en el navegador..."
@@ -38,12 +48,12 @@ elif command -v chromium-browser &> /dev/null; then
     chromium-browser --start-fullscreen --app="http://127.0.0.1:8000/frontend/index.html" &
 elif command -v firefox &> /dev/null; then
     firefox --kiosk "http://127.0.0.1:8000/frontend/index.html" &
-else
+elif command -v xdg-open &> /dev/null; then
     xdg-open "http://127.0.0.1:8000/frontend/index.html" &
 fi
 
 echo "=========================================="
 echo "✅ AuraReader listo para operar."
-echo "Para cerrar, presiona Ctrl+C o cierra la ventana del navegador."
+echo "Accede manualmente en tu navegador: http://127.0.0.1:8000/frontend/index.html"
 echo "=========================================="
 
