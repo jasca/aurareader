@@ -37,11 +37,67 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentColorHex = '#34d399'; 
     let collectedEmotions = { happy: 0, neutral: 0, angry: 0, sad: 0, fearful: 0 };
     let emotionFramesCount = 0;
-    let cameraObj = null;
+    
+    // Cámara y Dispositivos
+    const cameraSelect = document.getElementById('cameraSelect');
+    let currentStream = null;
+    let animFrameId = null;
+    let isProcessingFrame = false;
     
     // Buffers estáticos para la máscara y la persona
     let staticMask = document.createElement('canvas');
     let staticPerson = document.createElement('canvas');
+
+    async function populateCameraDevices() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        try {
+            let devices = await navigator.mediaDevices.enumerateDevices();
+            let videoDevices = devices.filter(d => d.kind === 'videoinput');
+            
+            // Si las etiquetas están vacías, solicitar permiso preliminar para leer los nombres
+            if (videoDevices.length > 0 && !videoDevices[0].label) {
+                try {
+                    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    tempStream.getTracks().forEach(t => t.stop());
+                    devices = await navigator.mediaDevices.enumerateDevices();
+                    videoDevices = devices.filter(d => d.kind === 'videoinput');
+                } catch (permErr) {
+                    console.warn("Permiso de cámara preliminar no otorgado:", permErr);
+                }
+            }
+
+            cameraSelect.innerHTML = '';
+            if (videoDevices.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.text = 'No se encontraron cámaras';
+                cameraSelect.appendChild(opt);
+                return;
+            }
+
+            let selectedIndex = 0;
+            videoDevices.forEach((device, index) => {
+                const opt = document.createElement('option');
+                opt.value = device.deviceId;
+                const label = device.label || `Cámara ${index + 1}`;
+                opt.text = label;
+                cameraSelect.appendChild(opt);
+
+                const lower = label.toLowerCase();
+                if (lower.includes('droidcam') || lower.includes('loopback') || lower.includes('dummy') || lower.includes('v4l2')) {
+                    selectedIndex = index;
+                }
+            });
+            cameraSelect.selectedIndex = selectedIndex;
+        } catch (err) {
+            console.error("Error al enumerar cámaras:", err);
+        }
+    }
+
+    populateCameraDevices();
+    if (navigator.mediaDevices) {
+        navigator.mediaDevices.addEventListener('devicechange', populateCameraDevices);
+    }
 
     function resizeCanvas() {
         canvasElement.width = window.innerWidth; canvasElement.height = window.innerHeight;
@@ -89,7 +145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     loadModels();
 
-    function startCameraIfNeeded(callback) {
+    async function startCameraIfNeeded(callback) {
         if (isCameraRunning) {
             if(callback) callback();
             return;
@@ -98,29 +154,58 @@ document.addEventListener('DOMContentLoaded', async () => {
         breathCircle.className = "breath-circle";
         breathingUI.classList.remove('hidden');
         
-        const tryStartCamera = (width, height) => {
-            cameraObj = new Camera(videoElement, {
-                onFrame: async () => { if (!isFrozen) await selfieSegmentation.send({image: videoElement}); },
-                width: width, height: height
-            });
-            return cameraObj.start();
+        const selectedDeviceId = cameraSelect ? cameraSelect.value : '';
+
+        const tryGetUserMedia = async (deviceId) => {
+            let vConstraint = { width: { ideal: 1280 }, height: { ideal: 720 } };
+            if (deviceId) vConstraint.deviceId = { exact: deviceId };
+            try {
+                return await navigator.mediaDevices.getUserMedia({ video: vConstraint });
+            } catch (e1) {
+                console.warn("Reintentando captura con restricciones holgadas...", e1);
+                let fallbackConstraint = deviceId ? { deviceId: { exact: deviceId } } : true;
+                return await navigator.mediaDevices.getUserMedia({ video: fallbackConstraint });
+            }
         };
 
-        tryStartCamera(1280, 720).then(() => {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(t => t.stop());
+            }
+            currentStream = await tryGetUserMedia(selectedDeviceId);
+            videoElement.srcObject = currentStream;
+            await videoElement.play();
             isCameraRunning = true;
+
+            runFrameLoop();
             if(callback) callback();
-        }).catch(err => {
-            console.warn("Resolución 1280x720 no compatible en esta cámara, probando 640x480...", err);
-            tryStartCamera(640, 480).then(() => {
-                isCameraRunning = true;
-                if(callback) callback();
-            }).catch(err2 => {
-                console.error("Error al acceder a la cámara integrada de la notebook:", err2);
-                alert("No se pudo iniciar la cámara integrada de la notebook. Asegúrate de otorgar los permisos en el navegador.");
-                breathingUI.classList.add('hidden');
-                resetToMenu();
-            });
-        });
+        } catch (err) {
+            console.error("Error al iniciar cámara/DroidCam:", err);
+            alert("No se pudo iniciar la cámara seleccionada (DroidCam). Verifica que la app DroidCam esté abierta y activa en Linux.");
+            breathingUI.classList.add('hidden');
+            resetToMenu();
+        }
+    }
+
+    function runFrameLoop() {
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+        
+        async function processFrame() {
+            if (!isCameraRunning) return;
+            if (!isFrozen && !isProcessingFrame && videoElement.readyState >= 2) {
+                isProcessingFrame = true;
+                try {
+                    await selfieSegmentation.send({ image: videoElement });
+                } catch (e) {
+                    console.error("Error procesando frame:", e);
+                }
+                isProcessingFrame = false;
+            }
+            if (isCameraRunning) {
+                animFrameId = requestAnimationFrame(processFrame);
+            }
+        }
+        processFrame();
     }
 
     // Algoritmo para expandir máscara acotada (Requerimiento 3: 2-3 cm de silueta)
@@ -548,10 +633,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function resetToMenu() {
-        if(cameraObj && isCameraRunning) {
-            cameraObj.stop();
-            isCameraRunning = false;
+        if (currentStream && isCameraRunning) {
+            currentStream.getTracks().forEach(t => t.stop());
+            currentStream = null;
         }
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+        isCameraRunning = false;
         isScanning = false;
         isFrozen = false;
         currentMode = null;
