@@ -38,8 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let collectedEmotions = { happy: 0, neutral: 0, angry: 0, sad: 0, fearful: 0 };
     let emotionFramesCount = 0;
     
-    // Cámara y Dispositivos
-    const cameraSelect = document.getElementById('cameraSelect');
+    // Cámara
     let currentStream = null;
     let animFrameId = null;
     let isProcessingFrame = false;
@@ -47,51 +46,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Buffers estáticos para la máscara y la persona
     let staticMask = document.createElement('canvas');
     let staticPerson = document.createElement('canvas');
-
-    async function populateCameraDevices() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
-        try {
-            let devices = await navigator.mediaDevices.enumerateDevices();
-            let videoDevices = devices.filter(d => d.kind === 'videoinput');
-            
-            // Si las etiquetas están vacías, solicitar permiso preliminar para leer los nombres de las cámaras
-            if (videoDevices.length > 0 && !videoDevices[0].label) {
-                try {
-                    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    tempStream.getTracks().forEach(t => t.stop());
-                    devices = await navigator.mediaDevices.enumerateDevices();
-                    videoDevices = devices.filter(d => d.kind === 'videoinput');
-                } catch (permErr) {
-                    console.warn("Permiso de cámara preliminar no otorgado:", permErr);
-                }
-            }
-
-            cameraSelect.innerHTML = '';
-            
-            // Opción por defecto (Universal)
-            const defaultOpt = document.createElement('option');
-            defaultOpt.value = '';
-            defaultOpt.text = '📷 Cámara Predeterminada / DroidCam';
-            cameraSelect.appendChild(defaultOpt);
-
-            let selectedIndex = 0; // Por defecto la opción universal
-            videoDevices.forEach((device, index) => {
-                const opt = document.createElement('option');
-                opt.value = device.deviceId;
-                const label = device.label || `Cámara ${index + 1}`;
-                opt.text = label;
-                cameraSelect.appendChild(opt);
-            });
-            cameraSelect.selectedIndex = selectedIndex;
-        } catch (err) {
-            console.error("Error al enumerar cámaras:", err);
-        }
-    }
-
-    populateCameraDevices();
-    if (navigator.mediaDevices) {
-        navigator.mediaDevices.addEventListener('devicechange', populateCameraDevices);
-    }
 
     function resizeCanvas() {
         canvasElement.width = window.innerWidth; canvasElement.height = window.innerHeight;
@@ -147,40 +101,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         breathText.innerText = "Conectando Cámara...";
         breathCircle.className = "breath-circle";
         breathingUI.classList.remove('hidden');
-        
-        const selectedDeviceId = cameraSelect ? cameraSelect.value : '';
 
-        const tryGetUserMedia = async (deviceId) => {
-            // 1. Intentar con deviceId preferido e ideal resolución
+        const tryGetUserMedia = async () => {
             try {
-                const constraints = deviceId
-                    ? { video: { deviceId: { ideal: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } }
-                    : { video: { width: { ideal: 1280 }, height: { ideal: 720 } } };
-                return await navigator.mediaDevices.getUserMedia(constraints);
+                return await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
             } catch (e1) {
-                console.warn("Intento 1 de cámara falló:", e1);
+                console.warn("Reintentando cámara con configuración genérica...", e1);
+                return await navigator.mediaDevices.getUserMedia({ video: true });
             }
-
-            // 2. Intentar solo con deviceId preferido sin restricciones de resolución
-            try {
-                const constraints = deviceId
-                    ? { video: { deviceId: { ideal: deviceId } } }
-                    : { video: true };
-                return await navigator.mediaDevices.getUserMedia(constraints);
-            } catch (e2) {
-                console.warn("Intento 2 de cámara falló:", e2);
-            }
-
-            // 3. Fallback universal total (cualquier cámara disponible sin ID estricto)
-            console.warn("Usando fallback universal { video: true }");
-            return await navigator.mediaDevices.getUserMedia({ video: true });
         };
 
         try {
             if (currentStream) {
                 currentStream.getTracks().forEach(t => t.stop());
             }
-            currentStream = await tryGetUserMedia(selectedDeviceId);
+            currentStream = await tryGetUserMedia();
             videoElement.srcObject = currentStream;
             await videoElement.play();
             isCameraRunning = true;
@@ -188,8 +125,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             runFrameLoop();
             if(callback) callback();
         } catch (err) {
-            console.error("Error al iniciar cámara/DroidCam:", err);
-            alert("No se pudo iniciar la cámara (DroidCam). Verifica que la app DroidCam esté abierta y activa en Linux.");
+            console.error("Error al iniciar cámara:", err);
+            alert("No se pudo iniciar la cámara. Asegúrate de permitir los permisos de cámara en el navegador.");
             breathingUI.classList.add('hidden');
             resetToMenu();
         }
